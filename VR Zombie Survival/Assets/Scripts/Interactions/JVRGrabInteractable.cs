@@ -5,6 +5,7 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.XR;
 using UnityEngine.XR;
+using static UnityEngine.GraphicsBuffer;
 
 public class JVRGrabInteractable : MonoBehaviour
 {
@@ -13,41 +14,32 @@ public class JVRGrabInteractable : MonoBehaviour
     [SerializeField]
     private List<Transform> RightHandAttachTransforms;
 
+    private JVRDirectInteractor _interactor;
     private Transform _attachTransform;
-    private bool hoverable = true;
+    public bool hoverable = true;
     private bool isMoving = false;
 
-    private Vector3 targetPosition;
-    private Quaternion targetRotation;
+    private Transform target;
+    private Rigidbody rb;
 
-    private Vector3 _attachOffsetPosition;
-    private Quaternion _attachOffsetRotation;
-
-    private Rigidbody _rigidbody;
-
-    private float velocityDamping = 0.9f;
-    private float velocityScale = 1f;
-    private float angularVelocityDamping = 0.9f;
-    private float angularVelocityScale = 1f;
+    public float positionLerpSpeed = 0.1f;
+    public float rotationLerpSpeed = 0.1f;
 
     private void Awake()
     {
-        _rigidbody = GetComponent<Rigidbody>();
-        if (_rigidbody == null)
-        {
-            Debug.LogError("Rigidbody component is missing.");
-        }
+        rb = GetComponent<Rigidbody>();
+
     }
 
     public void OnHovered(JVRDirectInteractor interactor)
     {
-        if (!hoverable) { return; }
-
         if (interactor != null)
         {
-            if (interactor.grabAction.action.ReadValue<float>() > .8f)
+            _interactor = interactor;
+            target = _interactor.transform;
+            if (_interactor.grabAction.action.ReadValue<float>() > .8f)
             {
-                OnSelectEntering(interactor);
+                OnSelectEntering();
             }
         }
         else
@@ -56,30 +48,50 @@ public class JVRGrabInteractable : MonoBehaviour
         }
     }
 
-    private void OnSelectEntering(JVRDirectInteractor interactor)
+    private void OnSelectEntering()
     {
-        if (interactor.handedness == JVRDirectInteractor.Handedness.Right)
+        hoverable = false;
+
+        if (_interactor.handedness == JVRDirectInteractor.Handedness.Right)
         {
-            _attachTransform = GetClosestTransform(interactor.transform.position, RightHandAttachTransforms);
+            _attachTransform = GetClosestTransform(_interactor.transform.position, RightHandAttachTransforms);
         }
-        else if (interactor.handedness == JVRDirectInteractor.Handedness.Left)
+        else if (_interactor.handedness == JVRDirectInteractor.Handedness.Left)
         {
-            _attachTransform = GetClosestTransform(interactor.transform.position, LeftHandAttachTransforms);
+            _attachTransform = GetClosestTransform(_interactor.transform.position, LeftHandAttachTransforms);
         }
         else { Debug.Log("Direct Interactor Handedness not set."); }
 
-        _attachOffsetPosition = transform.position - _attachTransform.position;
-        _attachOffsetRotation = Quaternion.Inverse(_attachTransform.rotation) * transform.rotation;
-
-        StartMoving(interactor);
+        isMoving = true;
     }
 
-    private void StartMoving(JVRDirectInteractor interactor)
+    // Update is called once per frame
+    void FixedUpdate()
     {
-        targetPosition = interactor.transform.position;
-        targetRotation = interactor.transform.rotation;
 
-        isMoving = true;
+        if (isMoving)
+        {
+            PerformEaseIn();
+        }
+        
+    }
+
+    private void PerformEaseIn()
+    {
+        // Calculate the target position with offset
+        Vector3 targetPositionWithOffset = _interactor.transform.TransformPoint(_attachTransform.localPosition);
+        Quaternion targetRotationWithOffset = _interactor.transform.rotation * _attachTransform.localRotation;
+
+        Vector3 newPosition = Vector3.Lerp(transform.position, targetPositionWithOffset, positionLerpSpeed);
+        rb.velocity = (newPosition - transform.position) / Time.fixedDeltaTime;
+
+        Quaternion newRotation = Quaternion.Slerp(transform.rotation, targetRotationWithOffset, rotationLerpSpeed);
+        Quaternion rotationDifference = newRotation * Quaternion.Inverse(transform.rotation);
+        rotationDifference.ToAngleAxis(out float angleInDegrees, out Vector3 rotationAxis);
+        if (angleInDegrees > 180) angleInDegrees -= 360;
+
+        Vector3 angularVelocity = (rotationAxis * angleInDegrees * Mathf.Deg2Rad) / Time.fixedDeltaTime;
+        rb.angularVelocity = angularVelocity;
     }
 
     private Transform GetClosestTransform(Vector3 interactorPosition, List<Transform> possibleTransforms)
@@ -98,51 +110,5 @@ public class JVRGrabInteractable : MonoBehaviour
         }
 
         return closestTransform;
-    }
-
-    // Update is called once per frame
-    void FixedUpdate()
-    {
-        if (isMoving)
-        {
-            PerformVelocityTrackingUpdate(Time.fixedDeltaTime);
-        }
-    }
-
-    private void PerformVelocityTrackingUpdate(float deltaTime)
-    {
-        if (deltaTime < Mathf.Epsilon)
-            return;
-
-        // Do linear velocity tracking
-        if (_rigidbody != null)
-        {
-            _rigidbody.velocity *= (1f - velocityDamping);
-            var positionDelta = targetPosition - transform.position;
-            var velocity = positionDelta / deltaTime;
-            _rigidbody.velocity += (velocity * velocityScale);
-
-            // Do angular velocity tracking
-            _rigidbody.angularVelocity *= (1f - angularVelocityDamping);
-            var rotationDelta = targetRotation * Quaternion.Inverse(transform.rotation);
-            rotationDelta.ToAngleAxis(out var angleInDegrees, out var rotationAxis);
-            if (angleInDegrees > 180f)
-                angleInDegrees -= 360f;
-
-            if (Mathf.Abs(angleInDegrees) > Mathf.Epsilon)
-            {
-                var angularVelocity = (rotationAxis * (angleInDegrees * Mathf.Deg2Rad)) / deltaTime;
-                _rigidbody.angularVelocity += (angularVelocity * angularVelocityScale);
-            }
-        }
-
-        Debug.Log("moving");
-
-        // Check if the object has reached the target position and rotation
-        if (Vector3.Distance(transform.position, targetPosition) < 0.1f &&
-            Quaternion.Angle(transform.rotation, targetRotation) < 1.0f)
-        {
-            
-        }
     }
 }

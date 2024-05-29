@@ -8,23 +8,28 @@ public class HandController : MonoBehaviour
     public float positionLerpSpeed = 0.1f;
     public float rotationLerpSpeed = 0.1f;
 
-    void Update()
+    void Awake()
     {
         rb = GetComponent<Rigidbody>();
     }
 
     private void FixedUpdate()
     {
-        Vector3 newPosition = Vector3.Lerp(transform.position, target.position, positionLerpSpeed);
+        Vector3 targetPositionWithOffset;
+        Quaternion targetRotationWithOffset;
+
+        targetPositionWithOffset = target.TransformPoint(rotationOffset * Vector3.zero);
+        targetRotationWithOffset = target.rotation * rotationOffset;
+
+        Vector3 newPosition = Vector3.Lerp(transform.position, targetPositionWithOffset, positionLerpSpeed);
         rb.velocity = (newPosition - transform.position) / Time.fixedDeltaTime;
 
-        // Update rotation with lag
-        Quaternion targetRotWithOffset = target.rotation * rotationOffset;
-        Quaternion newRotation = Quaternion.Slerp(transform.rotation, targetRotWithOffset, rotationLerpSpeed);
+        Quaternion newRotation = Quaternion.Slerp(transform.rotation, targetRotationWithOffset, rotationLerpSpeed);
         Quaternion rotationDifference = newRotation * Quaternion.Inverse(transform.rotation);
         rotationDifference.ToAngleAxis(out float angleInDegree, out Vector3 rotationAxis);
+        if (angleInDegree > 180) angleInDegree -= 360;
 
-        Vector3 rotationDifferenceInDegree = angleInDegree * rotationAxis;
-        rb.angularVelocity = (rotationDifferenceInDegree * Mathf.Deg2Rad / Time.fixedDeltaTime);
+        Vector3 angularVelocity = (rotationAxis * angleInDegree * Mathf.Deg2Rad) / Time.fixedDeltaTime;
+        rb.angularVelocity = angularVelocity;
     }
 }

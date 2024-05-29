@@ -36,8 +36,11 @@ public class JVRDirectInteractor : MonoBehaviour
         if (other.gameObject.layer != LayerMask.NameToLayer("JVRGrabbable")) { return; }
 
         JVRGrabInteractable _interactable = other.GetComponent<JVRGrabInteractable>();
-
-        _interactable.OnHovered(this);
+        
+        if (_interactable.hoverable)
+        {
+            _interactable.OnHovered(this);
+        }
     }
 }
 
