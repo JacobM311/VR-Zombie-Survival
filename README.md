@@ -45,11 +45,11 @@ Objects ease into their new positions and rotations over a specified period, cre
 
 1. **Direct Interactor**:
     - Attach the `JVRDirectInteractor` script to any GameObject that you want to use for physical interacrions, this object will automatically populate with the needed components and values once the script is added.
-    - Set grabbable objects to the correct layer for the interactor to use.
     - Adjust `positionLerpSpeed` and `rotationLerpSpeed` to control the lag effect.
 
 2. **Grab Interactable**:
     - Attach the `JVRGrabInteractable` script to any GameObject that you want to be interactable with smooth grabbing functionality.
+    - Set grabbable objects to the correct layer for the interactor to use.
     - Set the appropriate hand attach transforms and configure the lerp speeds and easing times as needed.
 
 ### To Do:
