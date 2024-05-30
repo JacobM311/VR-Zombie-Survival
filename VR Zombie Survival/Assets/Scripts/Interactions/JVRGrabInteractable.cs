@@ -1,11 +1,11 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
-using TMPro;
 using UnityEngine;
+using UnityEngine.Events;
 using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.XR;
 using UnityEngine.XR;
-using static UnityEngine.GraphicsBuffer;
 
 public class JVRGrabInteractable : MonoBehaviour
 {
@@ -14,10 +14,11 @@ public class JVRGrabInteractable : MonoBehaviour
     [SerializeField]
     private List<Transform> RightHandAttachTransforms;
 
-    private JVRDirectInteractor _interactor;
+    private JVRDirectInteractor _currentInteractor;
     private Transform _attachTransform;
     public bool hoverable = true;
-    private bool isMoving = false;
+    private bool grabbing = false;
+    private bool swappable = true;
 
     private Transform target;
     private Rigidbody rb;
@@ -31,66 +32,94 @@ public class JVRGrabInteractable : MonoBehaviour
 
     }
 
-    public void OnHovered(JVRDirectInteractor interactor)
+    public void Hovered(JVRDirectInteractor interactor)
     {
         if (interactor != null)
         {
-            _interactor = interactor;
-            target = _interactor.transform;
-            if (_interactor.grabAction.action.ReadValue<float>() > .8f)
+            _currentInteractor = interactor;
+            _currentInteractor.TriggerHover(this);
+
+            if (interactor.grabAction.action.ReadValue<float>() > .8f)
             {
-                OnSelectEntering();
+                interactor.canDetectGrabbable = false;
+                SelectEntering(interactor);
             }
         }
-        else
-        {
-            Debug.Log("Interactor not found.");
-        }
+        else { Debug.Log("Interactor not found."); }
     }
 
-    private void OnSelectEntering()
+    private void SelectEntering(JVRDirectInteractor interactor)
     {
-        hoverable = false;
+        _currentInteractor.TriggerSelectEntering(this);
 
-        if (_interactor.handedness == JVRDirectInteractor.Handedness.Right)
+        if (interactor.handedness == JVRDirectInteractor.Handedness.Right)
         {
-            _attachTransform = GetClosestTransform(_interactor.transform.position, RightHandAttachTransforms);
+            _attachTransform = GetClosestTransform(interactor.transform.position, RightHandAttachTransforms);
         }
-        else if (_interactor.handedness == JVRDirectInteractor.Handedness.Left)
+        else if (interactor.handedness == JVRDirectInteractor.Handedness.Left)
         {
-            _attachTransform = GetClosestTransform(_interactor.transform.position, LeftHandAttachTransforms);
+            _attachTransform = GetClosestTransform(interactor.transform.position, LeftHandAttachTransforms);
         }
         else { Debug.Log("Direct Interactor Handedness not set."); }
 
-        isMoving = true;
+        SelectEntered(interactor);
+    }
+
+    private void SelectEntered(JVRDirectInteractor interactor)
+    {
+        grabbing = true;
+        _currentInteractor.TriggerSelectEntered(this);
+    }
+
+    private void SelectExited()
+    {
+        grabbing = false;
+        _currentInteractor.canDetectGrabbable = true;
+        _currentInteractor = null;
+        _attachTransform = null;
+    }
+
+    void Update()
+    {
+        if (!grabbing) { return; }
+
+        if (_currentInteractor.grabAction.action.ReadValue<float>() < .01f)
+        {
+            SelectExited();
+        }
+
     }
 
     // Update is called once per frame
     void FixedUpdate()
     {
 
-        if (isMoving)
+        if (grabbing)
         {
-            PerformEaseIn();
+            PerformGrab();
         }
         
     }
 
-    private void PerformEaseIn()
+    private void PerformGrab()
     {
         // Calculate the target position with offset
-        Vector3 targetPositionWithOffset = _interactor.transform.TransformPoint(_attachTransform.localPosition);
-        Quaternion targetRotationWithOffset = _interactor.transform.rotation * _attachTransform.localRotation;
+        Vector3 targetPositionWithOffset = _currentInteractor.transform.TransformPoint(_attachTransform.localPosition);
+        Quaternion targetRotationWithOffset = _currentInteractor.transform.rotation * _attachTransform.localRotation;
 
+        // Calculate the velocity needed to move the object to the target position
         Vector3 newPosition = Vector3.Lerp(transform.position, targetPositionWithOffset, positionLerpSpeed);
-        rb.velocity = (newPosition - transform.position) / Time.fixedDeltaTime;
+        rb.velocity = (newPosition - transform.position) / Time.fixedDeltaTime / 200f;
 
+        // Calculate the target rotation with offset
         Quaternion newRotation = Quaternion.Slerp(transform.rotation, targetRotationWithOffset, rotationLerpSpeed);
         Quaternion rotationDifference = newRotation * Quaternion.Inverse(transform.rotation);
         rotationDifference.ToAngleAxis(out float angleInDegrees, out Vector3 rotationAxis);
+        // Prevent weird rotations when rotating past 180 degrees
         if (angleInDegrees > 180) angleInDegrees -= 360;
 
-        Vector3 angularVelocity = (rotationAxis * angleInDegrees * Mathf.Deg2Rad) / Time.fixedDeltaTime;
+        // Calculate the angular velocity needed to move the object to the target rotation
+        Vector3 angularVelocity = (rotationAxis * angleInDegrees * Mathf.Deg2Rad) / Time.fixedDeltaTime / 200f;
         rb.angularVelocity = angularVelocity;
     }
 

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Unity.VisualScripting;
 using UnityEditor;
 using UnityEngine;
+using UnityEngine.Events;
 using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.XR;
 using UnityEngine.XR;
@@ -10,19 +11,39 @@ using UnityEngine.XR;
 [RequireComponent(typeof(SphereCollider))]
 public class JVRDirectInteractor : MonoBehaviour
 {
-    public SphereCollider trigger;
-    public InputActionProperty grabAction;
-
-    public enum Handedness {
+    public enum Handedness
+    {
         Right,
         Left
     }
     public Handedness handedness;
+    public bool canDetectGrabbable = true;
+
+    public SphereCollider trigger;
+    public InputActionProperty grabAction;
+
+    public UnityEvent<JVRGrabInteractable> OnHoverEvent;
+    public UnityEvent<JVRGrabInteractable> OnSelectEnteringEvent;
+    public UnityEvent<JVRGrabInteractable> OnSelectEnteredEvent;
+    public UnityEvent<JVRGrabInteractable> OnPerformGrabEvent;
+
     // Start is called before the first frame update
-    void Start()
+    void Awake()
     {
         trigger = GetComponent<SphereCollider>();
         trigger.isTrigger = true;
+
+        if (OnHoverEvent == null)
+            OnHoverEvent = new UnityEvent<JVRGrabInteractable>();
+
+        if (OnSelectEnteringEvent == null)
+            OnSelectEnteringEvent = new UnityEvent<JVRGrabInteractable>();
+
+        if (OnSelectEnteredEvent == null)
+            OnSelectEnteredEvent = new UnityEvent<JVRGrabInteractable>();
+
+        if (OnPerformGrabEvent == null)
+            OnPerformGrabEvent = new UnityEvent<JVRGrabInteractable>();
     }
 
     // Update is called once per frame
@@ -37,10 +58,30 @@ public class JVRDirectInteractor : MonoBehaviour
 
         JVRGrabInteractable _interactable = other.GetComponent<JVRGrabInteractable>();
         
-        if (_interactable.hoverable)
+        if (canDetectGrabbable)
         {
-            _interactable.OnHovered(this);
+            _interactable.Hovered(this);
         }
+    }
+
+    public void TriggerHover(JVRGrabInteractable interactable)
+    {
+        OnHoverEvent?.Invoke(interactable);
+    }
+
+    public void TriggerSelectEntering(JVRGrabInteractable interactable)
+    {
+        OnSelectEnteringEvent?.Invoke(interactable);
+    }
+
+    public void TriggerSelectEntered(JVRGrabInteractable interactable)
+    {
+        OnSelectEnteredEvent?.Invoke(interactable);
+    }
+
+    public void TriggerPerformGrab(JVRGrabInteractable interactable)
+    {
+        OnPerformGrabEvent?.Invoke(interactable);
     }
 }
 
