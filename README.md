@@ -54,3 +54,4 @@ Objects ease into their new positions and rotations over a specified period, cre
 
 ### To Do:
 - **Update Physics Scripts**: Update scripts I've made for throwing physics using the Unity interaction system to work with my custom interactions.
+- Make a modular system that can be easily applied to different object to apply physics interaction within the editor, goal will be to eventually move this to the Asset Store.
